@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llmdiff · compare two LLM answers</title>
+<style>
+  :root { --bg:#0c1410; --card:#14201a; --line:#25382d; --text:#e6f2ea; --mute:#8fa99a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:960px; margin:0 auto; padding:28px 18px 60px; }
+  h1 { margin:0; font-size:30px; background:linear-gradient(90deg,#22c55e,#eab308); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  p.sub { color:var(--mute); margin:4px 0 18px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:640px) { .grid { grid-template-columns:1fr; } }
+  label { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:var(--mute); margin:0 0 6px; }
+  textarea { width:100%; height:170px; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:12px; padding:12px; font:14px/1.5 inherit; resize:vertical; }
+  textarea:focus { outline:none; border-color:#22c55e; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; align-items:center; }
+  button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:999px; padding:7px 16px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:#22c55e; }
+  .stat { font-size:13px; padding:5px 12px; border-radius:999px; background:var(--card); border:1px solid var(--line); }
+  .stat b { font-weight:700; }
+  .add b { color:#4ade80; } .del b { color:#f87171; } .sim b { color:#facc15; }
+  #out { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; white-space:pre-wrap; word-break:break-word; min-height:80px; }
+  ins { background:#22c55e30; color:#86efac; text-decoration:none; border-radius:3px; padding:0 2px; }
+  del { background:#ef444430; color:#fca5a5; border-radius:3px; padding:0 2px; }
+  .note { color:var(--mute); font-size:12px; margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>llmdiff</h1>
+  <p class="sub">Paste two answers. See exactly what changed. Nothing leaves your browser.</p>
+
+  <div class="grid">
+    <div><label for="a">Answer A (original)</label><textarea id="a" placeholder="Paste the first output..."></textarea></div>
+    <div><label for="b">Answer B (new)</label><textarea id="b" placeholder="Paste the second output..."></textarea></div>
+  </div>
+
+  <div class="row">
+    <button id="swap">Swap A and B</button>
+    <button id="sample">Load sample</button>
+    <span class="stat add" id="sAdd"><b>0</b> added</span>
+    <span class="stat del" id="sDel"><b>0</b> removed</span>
+    <span class="stat sim" id="sSim"><b>100%</b> similar</span>
+  </div>
+
+  <div id="out">The diff appears here.</div>
+  <div class="note" id="note"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const MAX = 3000;
+
+function words(t) { return t.split(/\s+/).filter(Boolean); }
+
+function diff(a, b) {
+  const n = a.length, m = b.length, w = m + 1;
+  const dp = new Uint16Array((n + 1) * w);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * w + j] = a[i] === b[j]
+        ? dp[(i + 1) * w + j + 1] + 1
+        : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
+    }
+  }
+  const ops = []; let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { ops.push(["=", a[i]]); i++; j++; }
+    else if (dp[(i + 1) * w + j] >= dp[i * w + j + 1]) ops.push(["-", a[i++]]);
+    else ops.push(["+", b[j++]]);
+  }
+  while (i < n) ops.push(["-", a[i++]]);
+  while (j < m) ops.push(["+", b[j++]]);
+  return { ops, lcs: dp[0] };
+}
+
+function run() {
+  let a = words($("a").value), b = words($("b").value), note = "";
+  if (a.length > MAX || b.length > MAX) {
+    a = a.slice(0, MAX); b = b.slice(0, MAX);
+    note = "Long input: only the first " + MAX + " words of each side were compared.";
+  }
+  $("note").textContent = note;
+  if (!a.length && !b.length) {
+    $("out").textContent = "The diff appears here.";
+    $("sAdd").firstChild.textContent = 0; $("sDel").firstChild.textContent = 0; $("sSim").firstChild.textContent = "100%";
+    return;
+  }
+  const { ops, lcs } = diff(a, b);
+  const frag = document.createDocumentFragment();
+  let add = 0, del = 0;
+  ops.forEach(([t, word], k) => {
+    let el;
+    if (t === "=") el = document.createTextNode(word);
+    else { el = document.createElement(t === "+" ? "ins" : "del"); el.textContent = word; t === "+" ? add++ : del++; }
+    frag.append(el);
+    if (k < ops.length - 1) frag.append(" ");
+  });
+  $("out").replaceChildren(frag);
+  const total = a.length + b.length;
+  const sim = total ? Math.round((2 * lcs / total) * 100) : 100;
+  $("sAdd").firstChild.textContent = add;
+  $("sDel").firstChild.textContent = del;
+  $("sSim").firstChild.textContent = sim + "%";
+}
+
+let timer;
+["a", "b"].forEach(id => $(id).addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 150); }));
+$("swap").onclick = () => { const t = $("a").value; $("a").value = $("b").value; $("b").value = t; run(); };
+$("sample").onclick = () => {
+  $("a").value = "The capital of France is Paris. It is known for the Eiffel Tower and great food.";
+  $("b").value = "Paris is the capital of France. It is famous for the Eiffel Tower, museums and great food.";
+  run();
+};
+</script>
+</body>
+</html>
