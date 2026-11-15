@@ -11,7 +11,7 @@
 
 **llmdiff** compares two LLM answers word by word. Swapped models? Tweaked your prompt? Paste both outputs and instantly see what was added, what was removed, and how similar they are.
 
-## Use it
+## 📌 Use it
 
 1. Open `index.html` in your browser. No server, no build.
 2. Paste answer A and answer B.
@@ -19,7 +19,7 @@
 
 It updates live as you type. Nothing is uploaded.
 
-## What you get
+## ✨ What you get
 
 - Inline word-level diff (longest common subsequence)
 - Counts of added and removed words
@@ -27,18 +27,18 @@ It updates live as you type. Nothing is uploaded.
 - One-click swap of A and B
 - Handles up to 3,000 words per side
 
-## Good for
+## 📌 Good for
 
 - Comparing two models on the same prompt
 - Checking how a prompt tweak changed the answer
 - Reviewing edits an AI made to your draft
 - Spotting silent changes between two runs
 
-## Notes
+## 📌 Notes
 
 - Comparison is word-based and ignores line breaks and extra spaces, so you see wording changes rather than formatting noise.
 - Similarity is `2 x shared words / total words`.
 
-## License
+## 📄 License
 
 MIT
